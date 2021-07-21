@@ -97,8 +97,10 @@ func FindWindow(title string) w32.HWND{
 			child := GetChild(h)
 			if (child != 0) {
 			  hwnd = child
-			  return 0
-			}		
+			} else {
+              hwnd = h
+            }
+			return 0
 		}
 		return 1
 	})
