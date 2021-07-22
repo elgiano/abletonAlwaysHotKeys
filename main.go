@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"syscall"
 	"time"
+	"path/filepath"
 	"unicode/utf8"
 	"unsafe"
 	"regexp"
@@ -58,20 +59,14 @@ var (
 	procMapVirtualKeyEx       = moduser32.NewProc("MapVirtualKeyExW")
 	procGetKeyState           = moduser32.NewProc("GetKeyState")
 	procEnumWindows           = moduser32.NewProc("EnumWindows")
-	procGetWindowText         = moduser32.NewProc("GetWindowTextW")
         procGetWindow             = moduser32.NewProc("GetWindow")
         procGetForegroundWindow   = moduser32.NewProc("GetForegroundWindow")
-)
 
-func GetWindowText(h w32.HWND) string{
-    buf := make([]uint16, 200)
-    res, _, _ := procGetWindowText.Call(uintptr(h), uintptr(unsafe.Pointer(&buf[0])), uintptr(200))
-    if (res == 0) {
-	return ""
-    }
-    text := syscall.UTF16ToString(buf)
-    return text	
-}
+	modkernel32 = syscall.NewLazyDLL("kernel32.dll")
+	procQueryName = modkernel32.NewProc("QueryFullProcessImageNameW")
+	procOpenProcess	 = modkernel32.NewProc("OpenProcess")
+
+)
 
 func GetChild(h w32.HWND) w32.HWND {
 	child, _, _ := procGetWindow.Call(uintptr(h), uintptr(5))
@@ -86,21 +81,40 @@ func IsActiveWindow(target w32.HWND) bool {
 	return activeWindow == target || child == target
 }
 
+func GetProcessPath(h w32.HWND) string {
+	_, pid := w32.GetWindowThreadProcessId(h)
+	fmt.Printf("PID: %d\n", pid)
+	proc, _, _ := procOpenProcess.Call(uintptr(0x1000), uintptr(0), uintptr(pid))
+	buf := make([]uint16, 200)
+	var nameLen int = 200
+	procQueryName.Call(proc, uintptr(0), uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&nameLen)))
+	text := syscall.UTF16ToString(buf)
+    	return text	
+}
+
 func FindWindow(title string) w32.HWND{
 	var hwnd w32.HWND
 	title = strings.ToLower(title)
 	cb := syscall.NewCallback(func(h w32.HWND, p uintptr) uintptr {
-		thisTitle := GetWindowText(h)
+		thisTitle := w32.GetWindowText(h)
 		match, _:= regexp.MatchString(title, strings.ToLower(thisTitle))
 		if(match) {
 			fmt.Printf("Found window: %s\n", thisTitle)
-			child := GetChild(h)
-			if (child != 0) {
-			  hwnd = child
+			procName := filepath.Base(GetProcessPath(h))
+			fmt.Printf("Process: %s\n", procName)
+			match, _:= regexp.MatchString(title, strings.ToLower(procName))
+			if(match) {
+				fmt.Printf("Found process: %s\n\n", procName)
+				child := GetChild(h)
+				if (child != 0) {
+			  		hwnd = child
+				} else {
+             				 hwnd = h
+           			}
+				return 0
 			} else {
-              hwnd = h
-            }
-			return 0
+				fmt.Printf("process name doesn't match... keep searching\n\n")
+			}
 		}
 		return 1
 	})
