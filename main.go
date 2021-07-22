@@ -33,7 +33,7 @@ func main() {
 		if !key.Empty {
 			if (IsAlphanumeric(key)) {
 				if (!IsActiveWindow(ableton)) {
-					w32.PostMessage(ableton, w32.WM_CHAR, uintptr(key.Keycode), 0)
+					w32.PostMessage(ableton, w32.WM_CHAR, uintptr(key.Rune), 0)
 				}
 			}
 			fmt.Printf("%c", key.Rune)
